@@ -1,0 +1,216 @@
+Description: Paste in testing code to reduce dependencies.
+ The upstream code imports github.com/juju/testing and github.com/juju/utils/clock
+ which are large packages, with many complex, circular dependencies. Only a tiny
+ fraction of that code is actually needed, so paste that in here rather than having
+ to package the entire mess.
+Author: Michael Hudson-Doyle <michael.hudson@ubuntu.com>
+Origin: vendor
+Forwarded: no
+Last-Update: 2016-12-19
+
+--- golang-gopkg-retry.v1-0.0~git20161025.0.c09f6b8.orig/retry_test.go
++++ golang-gopkg-retry.v1-0.0~git20161025.0.c09f6b8/retry_test.go
+@@ -4,12 +4,12 @@
+ package retry_test // import "gopkg.in/retry.v1"
+ 
+ import (
++	"sort"
++	"sync"
+ 	"time"
+ 
+-	"github.com/juju/testing"
+ 	gc "gopkg.in/check.v1"
+ 
+-	"github.com/juju/utils/clock"
+ 	"gopkg.in/retry.v1"
+ )
+ 
+@@ -89,7 +89,7 @@ func (*retrySuite) TestAttemptWithStop(c
+ }
+ 
+ func (*retrySuite) TestAttemptWithLaterStop(c *gc.C) {
+-	clock := testing.NewClock(time.Now())
++	clock := NewClock(time.Now())
+ 	stop := make(chan struct{})
+ 	done := make(chan struct{})
+ 	progress := make(chan struct{}, 10)
+@@ -119,7 +119,7 @@ func (*retrySuite) TestAttemptWithLaterS
+ }
+ 
+ func (*retrySuite) TestAttemptWithMockClock(c *gc.C) {
+-	clock := testing.NewClock(time.Now())
++	clock := NewClock(time.Now())
+ 	strategy := retry.Regular{
+ 		Delay: 5 * time.Second,
+ 		Total: 30 * time.Second,
+@@ -309,8 +309,6 @@ func closeTo(d0, d1 time.Duration) bool
+ }
+ 
+ type mockClock struct {
+-	clock.Clock
+-
+ 	now   time.Time
+ 	sleep func(d time.Duration)
+ }
+@@ -333,3 +331,161 @@ func assertReceive(c *gc.C, ch <-chan st
+ 		c.Fatalf("timed out waiting for %s", what)
+ 	}
+ }
++
++// Below is code from github.com/juju/testing/clock.go (fortunately with
++// the same copyright and license as this file), copied in rather than
++// packaging juju/testing and its many (oftentimes circular) dependencies.
++
++// timer implements a mock clock.Timer for testing purposes.
++type timer struct {
++	deadline time.Time
++	clock    *Clock
++	c        chan time.Time
++	// trigger is called when the timer expires. It is
++	// called with the clock mutex held and will not block.
++	trigger func()
++}
++
++// Chan is part of the clock.Timer interface.
++func (t *timer) Chan() <-chan time.Time {
++	return t.c
++}
++
++// Clock implements a mock clock.Clock for testing purposes.
++type Clock struct {
++	mu           sync.Mutex
++	now          time.Time
++	waiting      []*timer // timers waiting to fire, sorted by deadline.
++	notifyAlarms chan struct{}
++}
++
++// NewClock returns a new clock set to the supplied time. If your SUT needs to
++// call After, AfterFunc, NewTimer or Timer.Reset more than 10000 times: (1)
++// you have probably written a bad test; and (2) you'll need to read from the
++// Alarms chan to keep the buffer clear.
++func NewClock(now time.Time) *Clock {
++	return &Clock{
++		now:          now,
++		notifyAlarms: make(chan struct{}, 10000),
++	}
++}
++
++// Now is part of the clock.Clock interface.
++func (clock *Clock) Now() time.Time {
++	clock.mu.Lock()
++	defer clock.mu.Unlock()
++	return clock.now
++}
++
++// After is part of the clock.Clock interface.
++func (clock *Clock) After(d time.Duration) <-chan time.Time {
++	return clock.NewTimer(d).Chan()
++}
++
++func (clock *Clock) NewTimer(d time.Duration) *timer {
++	c := make(chan time.Time, 1)
++	return clock.addAlarm(d, c, func() {
++		c <- clock.now
++	})
++}
++
++func (clock *Clock) addAlarm(d time.Duration, c chan time.Time, trigger func()) *timer {
++	defer clock.notifyAlarm()
++	clock.mu.Lock()
++	defer clock.mu.Unlock()
++	t := &timer{
++		c:        c,
++		deadline: clock.now.Add(d),
++		clock:    clock,
++		trigger:  trigger,
++	}
++	clock.addTimer(t)
++	clock.triggerAll()
++	return t
++}
++
++// Advance advances the result of Now by the supplied duration, and sends
++// the "current" time on all alarms which are no longer "in the future".
++func (clock *Clock) Advance(d time.Duration) {
++	clock.mu.Lock()
++	defer clock.mu.Unlock()
++	clock.now = clock.now.Add(d)
++	clock.triggerAll()
++}
++
++// triggerAll triggers any alarms that are currently due and removes them
++// from clock.waiting.
++func (clock *Clock) triggerAll() {
++	triggered := 0
++	for _, t := range clock.waiting {
++		if clock.now.Before(t.deadline) {
++			break
++		}
++		t.trigger()
++		triggered++
++	}
++	clock.waiting = clock.waiting[triggered:]
++}
++
++// reset is the underlying implementation of clock.Timer.Reset, which may be
++// called by any Timer backed by this Clock.
++func (clock *Clock) reset(t *timer, d time.Duration) bool {
++	defer clock.notifyAlarm()
++	clock.mu.Lock()
++	defer clock.mu.Unlock()
++
++	found := false
++	for _, wt := range clock.waiting {
++		if wt == t {
++			found = true
++		}
++	}
++	if !found {
++		clock.waiting = append(clock.waiting, t)
++	}
++	t.deadline = clock.now.Add(d)
++	sort.Sort(byDeadline(clock.waiting))
++	return found
++}
++
++// stop is the underlying implementation of clock.Timer.Reset, which may be
++// called by any Timer backed by this Clock.
++func (clock *Clock) stop(t *timer) bool {
++	clock.mu.Lock()
++	defer clock.mu.Unlock()
++
++	for i, wt := range clock.waiting {
++		if wt == t {
++			clock.waiting = removeFromSlice(clock.waiting, i)
++			return true
++		}
++	}
++	return false
++}
++
++// addTimer adds an alarm at time t.
++func (clock *Clock) addTimer(t *timer) {
++	clock.waiting = append(clock.waiting, t)
++	sort.Sort(byDeadline(clock.waiting))
++}
++
++// notifyAlarm sends a value on the channel exposed by Alarms().
++func (clock *Clock) notifyAlarm() {
++	select {
++	case clock.notifyAlarms <- struct{}{}:
++	default:
++		panic("alarm notification buffer full")
++	}
++}
++
++// byDeadline is used to sort alarms by time.
++type byDeadline []*timer
++
++func (a byDeadline) Len() int           { return len(a) }
++func (a byDeadline) Less(i, j int) bool { return a[i].deadline.Before(a[j].deadline) }
++func (a byDeadline) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
++
++// removeFromSlice removes item at the specified index from the slice.
++func removeFromSlice(sl []*timer, index int) []*timer {
++	return append(sl[:index], sl[index+1:]...)
++}

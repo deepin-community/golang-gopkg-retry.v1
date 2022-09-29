@@ -1,0 +1,35 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: retry.v1
+Source: https://github.com/go-retry/retry/tree/v1
+
+Files: *
+Copyright: 2011-2015 Canonical Ltd.
+License: LGPL-3-static-exception
+
+Files: debian/*
+Copyright: 2016 Michael Hudson-Doyle <michael.hudson@ubuntu.com>
+License: LGPL-3-static-exception
+Comment: Debian packaging is licensed under the same terms as upstream
+
+License: LGPL-3-static-exception
+ This software is licensed under the LGPLv3.
+ .
+ As a special exception to the GNU Lesser General Public License version 3
+ ("LGPL3"), the copyright holders of this Library give you permission to
+ convey to a third party a Combined Work that links statically or dynamically
+ to this Library without providing any Minimal Corresponding Source or
+ Minimal Application Code as set out in 4d or providing the installation
+ information set out in section 4e, provided that you comply with the other
+ provisions of LGPL3 and provided that you meet, for the Application the
+ terms and conditions of the license(s) which apply to the Application.
+ .
+ Except as stated in this special exception, the provisions of LGPL3 will
+ continue to comply in full to this Library. If you modify this Library, you
+ may apply this exception to your version of this Library, but you are not
+ obliged to do so. If you do not wish to do so, delete this exception
+ statement from your version. This exception does not (and cannot) modify any
+ license terms which apply to the Application, with which you must still
+ comply.
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License can be found in `/usr/share/common-licenses/LGPL-3`.

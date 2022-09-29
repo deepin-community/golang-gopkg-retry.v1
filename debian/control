@@ -1,0 +1,27 @@
+Source: golang-gopkg-retry.v1
+Section: devel
+Priority: extra
+Maintainer: Debian Go Packaging Team <pkg-go-maintainers@lists.alioth.debian.org>
+Uploaders: Michael Hudson-Doyle <michael.hudson@ubuntu.com>
+Build-Depends: debhelper (>= 9),
+               dh-golang,
+               golang-go,
+               golang-gopkg-check.v1-dev
+Standards-Version: 3.9.8
+Homepage: https://gopkg.in/retry.v1
+Vcs-Browser: https://anonscm.debian.org/cgit/pkg-go/packages/golang-gopkg-retry.v1.git
+Vcs-Git: https://anonscm.debian.org/git/pkg-go/packages/golang-gopkg-retry.v1.git
+XS-Go-Import-Path: gopkg.in/retry.v1
+
+Package: golang-gopkg-retry.v1-dev
+Architecture: all
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         golang-go,
+         golang-gopkg-check.v1-dev
+Description: Simple retry mechanism for Go
+ Package retry provides a framework for retrying actions. It does not
+ itself invoke the action to be retried, but is intended to be used in
+ a retry loop.
+
+
